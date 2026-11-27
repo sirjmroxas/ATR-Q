@@ -516,9 +516,9 @@ export function openCourtForNext(session: Session, plan: Plan, preview: Plan[]) 
 
 function fill(s:Session,courtIds:string[],now:number,override?:{index:unknown;lineup:unknown}){
   const courts = s.courts.filter(court => courtIds.includes(court.id) && !court.match);
-  if (!courts.length) throw Error('There is no available court.');
   const requested = s.requestedMatch?.gamesRemaining === 0 ? s.requestedMatch : undefined;
   if (requested && override) throw Error('The requested match is ready. Start it before sending another lineup.');
+  if (!override && !courts.length) throw Error('There is no available court.');
   const requestedCourt = requested ? courts[0] : undefined;
   if (requestedCourt && requested) {
     delete s.requestedMatch;
