@@ -97,8 +97,14 @@ function releaseEntryQueue(session: Session, ids: string[]) {
 
 function planAutomatic(s:Session,count:number,now:number,courtIds:string[]):Plan[]{
   const allWaiting = waiting(s);
-  const byId = new Map(allWaiting.map(player => [player.id, player]));
-  const queue = allWaiting.filter(player => !player.partnerId || byId.has(player.partnerId));
+  // With more than eight waiting players, only search the front half of the queue.
+  // Build the partner lookup from that same slice so a linked pair crossing the
+  // cutoff is excluded in full rather than pulling the partner in from below it.
+  const selectionQueue = allWaiting.length > 8
+    ? allWaiting.slice(0, Math.ceil(allWaiting.length / 2))
+    : allWaiting;
+  const byId = new Map(selectionQueue.map(player => [player.id, player]));
+  const queue = selectionQueue.filter(player => !player.partnerId || byId.has(player.partnerId));
   count=Math.min(count,2,Math.floor(queue.length/4));if(!count)return [];
   const linked = playerLinks(queue);
   const entryBlockers = entryQueueBlockers(s, queue);

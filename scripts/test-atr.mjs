@@ -13,9 +13,30 @@ assert.throws(()=>applyAction(s,{type:'queueSettings',queueMode:'atr',fifo:true}
 
 for(let i=0;i<16;i++)s=applyAction(s,{type:'selfCheckin',name:'ATR '+i,checkInKey:crypto.randomUUID()},now+i);
 assert(s.players.every(p=>p.skill===''&&!p.side));
+const initialQueue=waiting(s);
 const planned=planMatches(s,2,now+20);
 assert.equal(planned.length,2);
 assert.equal(new Set(planned.flatMap(p=>p.teams.flat())).size,8);
+assert(planned.flatMap(p=>p.teams.flat()).every(id=>initialQueue.slice(0,8).some(player=>player.id===id)),
+  'With 16 waiting players, automatic selection must stay within the top eight');
+
+// At eight or fewer, the full queue remains eligible.
+let eight=applyAction(emptySession(now),{type:'queueSettings',queueMode:'atr'},now);
+eight=applyAction(eight,{type:'addPlayers',names:Array.from({length:8},(_,i)=>'Eight '+i)},now+1);
+assert.equal(planMatches(eight,2,now+2).length,2);
+
+// Odd queue sizes round the top half up. A linked pair crossing that boundary
+// must be excluded together, leaving the four unlinked players eligible.
+let boundary=applyAction(emptySession(now),{type:'queueSettings',queueMode:'atr'},now);
+boundary=applyAction(boundary,{type:'addPlayers',names:Array.from({length:10},(_,i)=>'Boundary '+i)},now+1);
+boundary.players.forEach((player,index)=>{player.waitSince=now+index;player.joinedAt=now+index;});
+const boundaryQueue=waiting(boundary);
+assert.equal(boundaryQueue.length,10);
+boundary=applyAction(boundary,{type:'linkPartners',playerId:boundaryQueue[4].id,partnerId:boundaryQueue[5].id},now+20);
+const boundaryPlans=planMatches(boundary,2,now+21);
+assert.equal(boundaryPlans.length,1);
+assert.deepEqual(new Set(boundaryPlans[0].teams.flat()),new Set(boundaryQueue.slice(0,4).map(player=>player.id)));
+
 const rerated=structuredClone(s);
 rerated.players.forEach((p,i)=>{p.skill=i%2?'5.5':'1.0';p.side=i%2?'A':'B';});
 assert.deepEqual(planMatches(rerated,2,now+20),planned);
