@@ -569,7 +569,9 @@ function finish(s:Session,court:Court,now:number,score:string,reason:string,winn
 function releaseRequestedMatch(s:Session,now:number,excluded:string[]=[]){
   const requested=s.requestedMatch;
   if(!requested)return;
-  const ahead=waiting(s).map(player=>player.id);
+  const aheadPlayers=waiting(s);
+  const ahead=aheadPlayers.map(player=>player.id);
+  const maxAheadGames=Math.max(0,...aheadPlayers.map(rotationGames));
   delete s.requestedMatch;
   const skip=new Set(excluded);
   for(const id of requested.teams.flat()){
@@ -577,6 +579,7 @@ function releaseRequestedMatch(s:Session,now:number,excluded:string[]=[]){
     if(!player||skip.has(id)||player.status!=='waiting')continue;
     player.waitSince=now;
     player.missed=0;
+    player.credit=Math.max(player.credit??0,maxAheadGames-player.games);
     player.queueAhead=[...ahead];
   }
 }

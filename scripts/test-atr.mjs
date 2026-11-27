@@ -81,6 +81,8 @@ assert.equal(requested.requestedMatch.gamesRemaining,4,'Every completed game dec
 requested=applyAction(requested,{type:'cancelRequestedMatch'},now+3);
 assert.equal(requested.requestedMatch,undefined);
 assert.equal(waiting(requested).length,16,'Cancelling returns all four players to the queue');
+assert.deepEqual(new Set(waiting(requested).slice(-4).map(player=>player.id)),new Set(selected),
+  'Cancelled requested-match players return at the bottom of the visible queue');
 assert(selected.every(id=>requested.players.find(player=>player.id===id).queueAhead?.length===12),
   'Cancelled requested-match players must rejoin behind everyone who was already waiting');
 
