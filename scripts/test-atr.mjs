@@ -75,6 +75,8 @@ const selected=waiting(requested).slice(-4).map(player=>player.id);
 requested=applyAction(requested,{type:'createRequestedMatch',playerIds:selected},now+1);
 assert.equal(requested.requestedMatch.gamesRemaining,5,'12 players ahead plus two active courts should require five completed games');
 assert.equal(waiting(requested).length,12,'Requested players must leave the regular waiting queue');
+assert(requested.players.filter(player=>!selected.includes(player.id)).every(player=>!player.queueAhead?.some(id=>selected.includes(id))),
+  'Players moved into a requested match must no longer block later arrivals through old queue snapshots');
 assert.deepEqual(requested.requestedMatch.teams.flat(),selected);
 requested=applyAction(requested,{type:'end',courtId:'c1',winner:'A'},now+2);
 assert.equal(requested.requestedMatch.gamesRemaining,4,'Every completed game decrements the requested-match countdown');
@@ -83,6 +85,8 @@ assert.equal(requested.requestedMatch,undefined);
 assert.equal(waiting(requested).length,16,'Cancelling returns all four players to the queue');
 assert.deepEqual(new Set(waiting(requested).slice(-4).map(player=>player.id)),new Set(selected),
   'Cancelled requested-match players return at the bottom of the visible queue');
+assert(requested.players.filter(player=>!selected.includes(player.id)).every(player=>!player.queueAhead?.some(id=>selected.includes(id))),
+  'Releasing a requested match must not leave its players in other players’ queue snapshots');
 assert(selected.every(id=>requested.players.find(player=>player.id===id).queueAhead?.length===12),
   'Cancelled requested-match players must rejoin behind everyone who was already waiting');
 

@@ -572,6 +572,7 @@ function releaseRequestedMatch(s:Session,now:number,excluded:string[]=[]){
   const aheadPlayers=waiting(s);
   const ahead=aheadPlayers.map(player=>player.id);
   const maxAheadGames=Math.max(0,...aheadPlayers.map(rotationGames));
+  releaseEntryQueue(s,requested.teams.flat());
   delete s.requestedMatch;
   const skip=new Set(excluded);
   for(const id of requested.teams.flat()){
@@ -644,6 +645,7 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
     assertLinkedLineup(s,teams);
     const selected=new Set(ids);
     for(const [courtId,lineup] of Object.entries(s.nextOverrides??{}))if(lineup.flat().some(id=>selected.has(id)))delete s.nextOverrides![courtId];
+    releaseEntryQueue(s,ids);
     const playersAhead=queue.length-4;
     const activeGames=s.courts.filter(item=>item.match).length;
     s.requestedMatch={teams,gamesRemaining:Math.ceil(playersAhead/4)+activeGames,createdAt:now};
