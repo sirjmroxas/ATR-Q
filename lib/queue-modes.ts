@@ -2,19 +2,10 @@ import type { Player, Session } from './engine';
 
 export const DEFAULT_SLOGAN = 'Good games. Better company.';
 export const QUEUE_MODES = [
-  ['atr', 'ATR Mode Social', 'Mixes players across courts to maximize first-time encounters. With 20+ active players on two courts, players sit out three game starts when enough eligible players are available.'],
-  ['atrResults', 'ATR Win Lose Mode', 'Winners play winners and losers play losers, with fresh teammates. Groups can mix when there are too few eligible players. No rating or club required.'],
-  ['balanced', 'Balanced', 'Balances team ratings and avoids repeat matchups.'],
-  ['social', 'Social Mix', 'Prioritizes fresh partners and meeting new players. Waiting time breaks ties. Ratings are not used.'],
-  ['skill', 'Skill Separated', 'Keeps players within half a rating point of each other.'],
-  ['results', 'Winners / Losers', 'Groups players by their last result with fresh teammates. Small queues can mix groups. New players can join either group.'],
-  ['skillCourts', 'Skill Courts', 'Alternates courts for players below 3.5 and players rated 3.5 or higher.'],
-  ['mixed', 'Mixed Doubles', 'Each team has one player registered in each mixed doubles category.'],
-  ['ladder', 'King/Queen of the Court', 'Winners move toward the first court. Losers move toward the last.'],
-  ['clubs', 'Club Wars', 'Two players from one club play two from the other.'],
+  ['atr', 'ATR matching', 'Fresh partners and first-time encounters come first. Queue order and wait protection keep rotations fair. With 20+ active players on two courts, players sit out three game starts when enough eligible players are available.'],
 ] as const;
-export type QueueMode = typeof QUEUE_MODES[number][0];
-export const isAtrMode = (mode:QueueMode|undefined) => mode==='atr'||mode==='atrResults';
+export type QueueMode = 'atr' | 'atrResults' | 'balanced' | 'social' | 'skill' | 'results' | 'skillCourts' | 'mixed' | 'ladder' | 'clubs';
+export const isAtrMode = (mode:QueueMode|undefined) => mode==='atr';
 
 export function clubNames(session: Session) {
   return session.clubs ?? { A: 'Club A', B: 'Club B' };

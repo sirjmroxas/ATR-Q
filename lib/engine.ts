@@ -6,7 +6,7 @@ type DoublesTeams = [string[], string[]];
 export type Match = {recordedPairs?:string[];teams:[string[],string[]];startedAt:number;pausedAt:number|null;pausedMs:number;id:string};
 export type Court = {id:string;name:string;match:Match|null};
 export type Plan = {teams:[string[],string[]];penalty:number;courtId?:string;manual?:boolean;resultFallback?:boolean;entryQueueVersion?:1};
-export type Session = {id:string;title:string;club:string;slogan?:string;globalArchives?:StandingsSnapshot[];globalStandingsRoot?:string;globalStandingsCutoffs?:StandingsCutoffs;queueMode?:QueueMode;fifo?:boolean;clubs?:{A:string;B:string};showStandings?:boolean;selfCheckin?:boolean;hardCap?:boolean;capacityLimit?:boolean;nextOverrides?:Record<string,DoublesTeams>;sharedNext?:Plan[];gameStarts?:number;primary:string;accent:string;logo:string;createdAt:number;endedAt?:number;players:Player[];courts:Court[];partners:Record<string,number>;opponents:Record<string,number>;history:{id:string;court:string;courtId?:string;teams:string[][];names:string[][];endedAt:number;duration:number;score:string;reason:string;winner?:0|1}[];round:number;rotationProgress:number;rotationSelections:string[];seed:number;standardRules:boolean;revision:number;updatedAt:number};
+export type Session = {id:string;title:string;club:string;slogan?:string;globalArchives?:StandingsSnapshot[];globalStandingsRoot?:string;globalStandingsCutoffs?:StandingsCutoffs;queueMode?:QueueMode;clubs?:{A:string;B:string};showStandings?:boolean;selfCheckin?:boolean;hardCap?:boolean;capacityLimit?:boolean;nextOverrides?:Record<string,DoublesTeams>;sharedNext?:Plan[];gameStarts?:number;primary:string;accent:string;logo:string;createdAt:number;endedAt?:number;players:Player[];courts:Court[];partners:Record<string,number>;opponents:Record<string,number>;history:{id:string;court:string;courtId?:string;teams:string[][];names:string[][];endedAt:number;duration:number;score:string;reason:string;winner?:0|1}[];round:number;rotationProgress:number;rotationSelections:string[];seed:number;standardRules:boolean;revision:number;updatedAt:number};
 export const CAP_MINUTES = 13;
 export const CAP_PLAYER_THRESHOLD = 22;
 export const CAP = CAP_MINUTES * 60_000;
@@ -20,7 +20,7 @@ const usesAtrSitOut = (s: Session) =>
 export const fastRules=(s:Session)=>activePlayers(s).length/s.courts.length>=9;
 export const effectiveFast=(s:Session)=>fastRules(s)||!s.standardRules;
 export const rotationGames=(p:Player)=>p.games+(p.credit||0);
-const usesQueueOrder = (session: Session) => isAtrMode(session.queueMode) || session.fifo !== undefined;
+const usesQueueOrder = (_session: Session) => true;
 function compareQueuePriority(a: Player, b: Player, byQueue = false) {
   return (byQueue ? 0 : rotationGames(a) - rotationGames(b)) || a.waitSince - b.waitSince || a.joinedAt - b.joinedAt || (byQueue ? 0 : a.id.localeCompare(b.id));
 }
@@ -105,7 +105,7 @@ function planAutomatic(s:Session,count:number,now:number,courtIds:string[]):Plan
   const byQueue = usesQueueOrder(s);
   const priorities = queuePriorities(queue, byQueue);
   const priorityOf = (player: Player) => priorities.get(player.id)!;
-  const mode=s.queueMode??'social';
+  const mode=s.queueMode??'atr';
   const strict=['skill','skillCourts','mixed','clubs','results'].includes(mode);
   const resultMode = mode==='results'||mode==='atrResults';
   const sitOut = usesAtrSitOut(s);
@@ -121,8 +121,7 @@ function planAutomatic(s:Session,count:number,now:number,courtIds:string[]):Plan
     : candidatePool(ordered,24);
   const waitPriority = (player:Player) => {
     const priority=priorityOf(player);
-    return s.fifo ? queue.length-queue.indexOf(priority)
-      : Math.max(0,now-priority.waitSince)/60000 + priority.missed*15;
+    return Math.max(0,now-priority.waitSince)/60000 + priority.missed*15;
   };
   const largestWait=Math.max(1,...pool.map(waitPriority));
   // This bound makes a mixed result group more expensive than every possible
@@ -500,7 +499,7 @@ function replaceCourtLineup(session: Session, match: Match, teams: DoublesTeams,
   }
 }
 
-export function emptySession(now=Date.now()):Session{return {id:'demo',title:'Evening open play',club:'The Atherton Pickleball Club',slogan:DEFAULT_SLOGAN,queueMode:'social',showStandings:false,primary:'#0B2E63',accent:'#E8FF4D',logo:'/atherton-crest.png',createdAt:now,players:[],courts:[{id:'c1',name:'Court 1',match:null},{id:'c2',name:'Court 2',match:null}],partners:{},opponents:{},history:[],round:0,rotationProgress:0,rotationSelections:[],seed:1,standardRules:true,revision:0,updatedAt:now};}
+export function emptySession(now=Date.now()):Session{return {id:'demo',title:'Evening open play',club:'The Atherton Pickleball Club',slogan:DEFAULT_SLOGAN,queueMode:'atr',showStandings:false,primary:'#0B2E63',accent:'#E8FF4D',logo:'/atherton-crest.png',createdAt:now,players:[],courts:[{id:'c1',name:'Court 1',match:null},{id:'c2',name:'Court 2',match:null}],partners:{},opponents:{},history:[],round:0,rotationProgress:0,rotationSelections:[],seed:1,standardRules:true,revision:0,updatedAt:now};}
 export function openCourtForNext(session: Session, plan: Plan, preview: Plan[]) {
   return session.courts.find(court => !court.match && (plan.courtId
     ? court.id === plan.courtId
@@ -621,7 +620,7 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
  case 'timer':{if(!court?.match)throw Error('No active game on this court.');if(hardCapEnabled(s))throw Error(`Timers cannot pause while the ${CAP_MINUTES}-minute hard cap is on.`);const m=court.match;if(m.pausedAt){m.pausedMs+=now-m.pausedAt;m.pausedAt=null;}else m.pausedAt=now;break;}
  case 'pausePlayer':{const p=s.players.find(p=>p.id===str('playerId'));if(!p)throw Error('Player not found.');if(p.status==='playing')throw Error('Swap this player off court before placing them on break.');if(p.status==='paused'){if(s.capacityLimit!==false&&activePlayers(s).length>=s.courts.length*12)throw Error('Active-player capacity is full.');p.status='waiting';p.waitSince=now;p.missed=0;const baseline=Math.floor(activePlayers(s).reduce((n,q)=>n+rotationGames(q),0)/Math.max(1,activePlayers(s).length));p.credit=Math.max(p.credit||0,baseline-p.games);}else if(p.status==='waiting'){p.status='paused';removeReservations(s,[p.id]);releaseEntryQueue(s,[p.id]);}else throw Error('This player is checked out.');break;}
  case 'swap':{if(!court?.match)throw Error('No active game.');const incoming=s.players.find(p=>p.id===str('incomingId')),out=s.players.find(p=>p.id===str('outgoingId'));if(!incoming||incoming.status!=='waiting'||!out||!court.match.teams.flat().includes(out.id))throw Error('Select an on-court player and a waiting replacement.');const teams=court.match.teams.map(t=>t.map(id=>id===out.id?incoming.id:id)) as [string[],string[]];
- const mode=s.queueMode??'social';
+ const mode=s.queueMode??'atr';
  const participants=teams.flat().map(id=>s.players.find(p=>p.id===id)!);
  const latest=mode==='results'||mode==='atrResults'?sessionResults(s).latest:new Map<string,'win'|'loss'>();
  if(!Number.isFinite(formatCost(mode,participants,s.courts.indexOf(court),latest)))throw Error('That swap does not fit the selected matching mode.');
@@ -788,24 +787,14 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
  }
  case 'queueSettings': {
    const mode=QUEUE_MODES.find(([key])=>key===action.queueMode);
-   if(!mode)throw Error('Choose a matching mode.');
-   if (mode[0] === 'clubs' || action.clubA !== undefined || action.clubB !== undefined) {
-     const A = String(action.clubA ?? s.clubs?.A ?? '').trim();
-     const B = String(action.clubB ?? s.clubs?.B ?? '').trim();
-     if (!A || !B || A.length > 60 || B.length > 60 || A.toLowerCase() === B.toLowerCase()) {
-       throw Error('Enter two different club names, up to 60 characters each.');
-     }
-     s.clubs = { A, B };
-   }
+   if(!mode)throw Error('ATR is the only matching mode.');
+   if (Object.hasOwn(action, 'fifo')) throw Error('FIFO is no longer a separate setting. ATR handles queue priority.');
    if (action.capacityLimit !== undefined) {
      if (typeof action.capacityLimit !== 'boolean') throw Error('Choose whether to limit players per court.');
      s.capacityLimit = action.capacityLimit;
    }
    s.queueMode=mode[0];
-   if (action.fifo !== undefined) {
-     if (typeof action.fifo !== 'boolean') throw Error('Choose whether to use first in, first out.');
-     s.fifo = action.fifo;
-   }
+   delete s.clubs;
    for (const [id, teams] of Object.entries(s.nextOverrides ?? {})) {
      if (!followsClubRules(s, teams)) delete s.nextOverrides![id];
    }
@@ -815,8 +804,8 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
  }
  case 'shuffle':s.seed++;break;
  case 'simulate':for(const c of s.courts)if(c.match)finish(s,c,now,'Not recorded','Simulated round');s.updatedAt=now;fill(s,s.courts.map(c=>c.id),now);break;
- case 'demo':{if(s.courts.length<2)throw Error('Add a second court before loading the 24-player demo.');const d=demoSession(now);d.courts=s.courts.map((c,i)=>({...c,match:s.queueMode==='clubs'?null:d.courts[i]?.match??null}));if(s.queueMode==='clubs')for(const player of d.players)player.status='waiting';s={...d,id:s.id,club:s.club,title:s.title,primary:s.primary,accent:s.accent,logo:s.logo,slogan:s.slogan,queueMode:s.queueMode,fifo:s.fifo,clubs:s.clubs,showStandings:s.showStandings,selfCheckin:s.selfCheckin,hardCap:s.hardCap,capacityLimit:s.capacityLimit,revision:s.revision};break;}
- case 'clear':s={...emptySession(now),id:s.id,club:s.club,title:s.title,primary:s.primary,accent:s.accent,logo:s.logo,slogan:s.slogan,queueMode:s.queueMode,fifo:s.fifo,clubs:s.clubs,showStandings:s.showStandings,selfCheckin:s.selfCheckin,hardCap:s.hardCap,capacityLimit:s.capacityLimit,revision:s.revision,courts:s.courts.map(c=>({...c,match:null}))};break;
+ case 'demo':{if(s.courts.length<2)throw Error('Add a second court before loading the 24-player demo.');const d=demoSession(now);d.courts=s.courts.map((c,i)=>({...c,match:s.queueMode==='clubs'?null:d.courts[i]?.match??null}));if(s.queueMode==='clubs')for(const player of d.players)player.status='waiting';s={...d,id:s.id,club:s.club,title:s.title,primary:s.primary,accent:s.accent,logo:s.logo,slogan:s.slogan,queueMode:'atr',showStandings:s.showStandings,selfCheckin:s.selfCheckin,hardCap:s.hardCap,capacityLimit:s.capacityLimit,revision:s.revision};break;}
+ case 'clear':s={...emptySession(now),id:s.id,club:s.club,title:s.title,primary:s.primary,accent:s.accent,logo:s.logo,slogan:s.slogan,queueMode:'atr',showStandings:s.showStandings,selfCheckin:s.selfCheckin,hardCap:s.hardCap,capacityLimit:s.capacityLimit,revision:s.revision,courts:s.courts.map(c=>({...c,match:null}))};break;
  case 'settings':{const primary=str('primary'),accent=str('accent');if(!/^#[0-9a-f]{6}$/i.test(primary)||!/^#[0-9a-f]{6}$/i.test(accent))throw Error('Use valid six-digit hex colors.');const logo=str('logo');if(logo&&!logo.startsWith('/atherton-crest.png')&&!/^data:image\/(png|jpeg|webp);base64,/.test(logo))throw Error('Upload a PNG, JPG, or WebP logo.');if(logo.length>400000)throw Error('Logo file is too large.');if(typeof action.slogan==='string')s.slogan=action.slogan.trim().slice(0,100);s.club=str('club').trim().slice(0,80)||s.club;s.title=str('title').trim().slice(0,80)||s.title;s.primary=primary;s.accent=accent;s.logo=logo||'/atherton-crest.png';s.standardRules=!!action.standardRules;const courtNames=Array.isArray(action.courtNames)?action.courtNames:[];s.courts.forEach((c,i)=>{c.name=String(courtNames[i]??c.name).trim().slice(0,30)||c.name;});break;}
  default:throw Error('Unknown session action.');
  }

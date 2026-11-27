@@ -52,7 +52,7 @@ export async function POST(request:Request){
    }
    if(!/^\d{4}$/.test(body.pin||''))return json({error:'Choose a four-digit organizer PIN.'},400);
    if(!await rateLimit(db,'create:'+await digest(ip),10))return json({error:'Too many sessions created. Please try again in 15 minutes.'},429);
-   let s=body.withDemo?demoSession():emptySession();if(body.branding)s=applyAction(s,{...body.branding,type:'settings',title:body.title});if(body.matching){const m=body.matching;s=applyAction(s,{type:'queueSettings',queueMode:m.queueMode,fifo:m.fifo,clubA:m.clubA,clubB:m.clubB,showStandings:m.showStandings,selfCheckin:m.selfCheckin,capacityLimit:m.capacityLimit});if(s.queueMode==='clubs'&&body.withDemo)s=applyAction(s,{type:'demo'});}s.id=crypto.randomUUID();if(body.title)s.title=String(body.title).trim().slice(0,80)||s.title;
+   let s=body.withDemo?demoSession():emptySession();if(body.branding)s=applyAction(s,{...body.branding,type:'settings',title:body.title});if(body.matching){const m=body.matching;s=applyAction(s,{type:'queueSettings',queueMode:'atr',showStandings:m.showStandings,selfCheckin:m.selfCheckin,capacityLimit:m.capacityLimit});if(s.queueMode==='clubs'&&body.withDemo)s=applyAction(s,{type:'demo'});}s.id=crypto.randomUUID();if(body.title)s.title=String(body.title).trim().slice(0,80)||s.title;
    s.globalStandingsRoot=rootId??s.id;
    const salt=crypto.randomUUID();await db.prepare('INSERT INTO sessions (id,owner,payload,revision,pin_hash,pin_salt,created_at) VALUES (?,?,?,?,?,?,?)').bind(s.id,owner,JSON.stringify(s),s.revision,await pinHash(body.pin,salt),salt,Date.now()).run();return json({session:s,token:await issueToken(db,s.id),serverTime:Date.now()});
   }
