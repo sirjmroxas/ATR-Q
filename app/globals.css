@@ -244,3 +244,22 @@
 }
 
 .last-game-label{display:flex!important;align-items:flex-start!important;flex-wrap:wrap;gap:4px!important;min-width:0}.last-game-prefix{flex-shrink:0}.last-game-teams{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;min-width:0;white-space:normal}.last-game-teams>span:not(.last-game-vs){overflow-wrap:anywhere}.last-game-vs{flex-shrink:0}
+
+.requested-match-panel{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff);display:grid;gap:13px;min-width:0}
+.requested-match-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.requested-match-heading h3{margin:3px 0 0;font-size:18px}
+.requested-match-teams{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px}
+.requested-match-teams>div{display:grid;gap:9px;min-width:0}
+.requested-match-teams .next-player{min-width:0}
+.requested-match-teams .next-player>span{overflow-wrap:anywhere}
+.requested-match-countdown,.requested-countdown-preview{display:grid;gap:4px;padding:13px;border-radius:9px;background:var(--paper,#f4f6f8)}
+.requested-match-countdown strong{font-size:27px;line-height:1.1}
+.requested-match-countdown span,.requested-countdown-preview small{font-size:12px;color:var(--muted);line-height:1.5}
+.requested-ready{background:#e6f4e8!important;color:#216b32!important}
+.requested-waiting{background:#fff1d6!important;color:#805600!important}
+.requested-countdown-preview{margin:14px 0}
+.requested-countdown-preview strong{font-size:14px}
+.dark-mode .requested-match-panel{background:#143b70;border-color:#42628c;color:#f0f5fc}
+.dark-mode .requested-match-countdown,.dark-mode .requested-countdown-preview{background:#1c477d}
+.dark-mode .requested-match-countdown span,.dark-mode .requested-countdown-preview small{color:#c5d6ec}
+@media(max-width:370px){.requested-match-panel{padding:12px}.requested-match-teams{gap:5px}.requested-match-teams .next-player{gap:5px}.requested-match-teams .next-player>span{font-size:11px}}
