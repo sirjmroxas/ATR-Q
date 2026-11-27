@@ -69,3 +69,29 @@ for(const count of [20,24]){
   assert(session.courts.some(court=>court.match));
 }
 console.log('ATR large-session rotation and sit-out planning passed.');
+
+let requested=demoSession(now);
+const selected=waiting(requested).slice(-4).map(player=>player.id);
+requested=applyAction(requested,{type:'createRequestedMatch',playerIds:selected},now+1);
+assert.equal(requested.requestedMatch.gamesRemaining,5,'12 players ahead plus two active courts should require five completed games');
+assert.equal(waiting(requested).length,12,'Requested players must leave the regular waiting queue');
+assert.deepEqual(requested.requestedMatch.teams.flat(),selected);
+requested=applyAction(requested,{type:'end',courtId:'c1',winner:'A'},now+2);
+assert.equal(requested.requestedMatch.gamesRemaining,4,'Every completed game decrements the requested-match countdown');
+requested=applyAction(requested,{type:'cancelRequestedMatch'},now+3);
+assert.equal(requested.requestedMatch,undefined);
+assert.equal(waiting(requested).length,16,'Cancelling returns all four players to the queue');
+assert(selected.every(id=>requested.players.find(player=>player.id===id).queueAhead?.length===12),
+  'Cancelled requested-match players must rejoin behind everyone who was already waiting');
+
+let readyRequested=demoSession(now);
+const readyIds=waiting(readyRequested).slice(-4).map(player=>player.id);
+readyRequested=applyAction(readyRequested,{type:'createRequestedMatch',playerIds:readyIds},now+1);
+readyRequested=applyAction(readyRequested,{type:'end',courtId:'c1',winner:'A'},now+2);
+readyRequested.requestedMatch.gamesRemaining=0;
+readyRequested=applyAction(readyRequested,{type:'fill',courtId:'c1'},now+3);
+assert.equal(readyRequested.requestedMatch,undefined,'Starting a ready requested match clears its pending record');
+assert.deepEqual(readyRequested.courts.find(court=>court.id==='c1').match.teams.flat(),readyIds,
+  'A ready requested match takes priority on the next open court');
+assert(readyIds.every(id=>readyRequested.players.find(player=>player.id===id).status==='playing'));
+console.log('Requested-match countdown, queue exclusion, cancellation and court priority passed.');

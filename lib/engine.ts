@@ -6,7 +6,8 @@ type DoublesTeams = [string[], string[]];
 export type Match = {recordedPairs?:string[];teams:[string[],string[]];startedAt:number;pausedAt:number|null;pausedMs:number;id:string};
 export type Court = {id:string;name:string;match:Match|null};
 export type Plan = {teams:[string[],string[]];penalty:number;courtId?:string;manual?:boolean;resultFallback?:boolean;entryQueueVersion?:1};
-export type Session = {id:string;title:string;club:string;slogan?:string;globalArchives?:StandingsSnapshot[];globalStandingsRoot?:string;globalStandingsCutoffs?:StandingsCutoffs;queueMode?:QueueMode;clubs?:{A:string;B:string};showStandings?:boolean;selfCheckin?:boolean;hardCap?:boolean;capacityLimit?:boolean;nextOverrides?:Record<string,DoublesTeams>;sharedNext?:Plan[];gameStarts?:number;primary:string;accent:string;logo:string;createdAt:number;endedAt?:number;players:Player[];courts:Court[];partners:Record<string,number>;opponents:Record<string,number>;history:{id:string;court:string;courtId?:string;teams:string[][];names:string[][];endedAt:number;duration:number;score:string;reason:string;winner?:0|1}[];round:number;rotationProgress:number;rotationSelections:string[];seed:number;standardRules:boolean;revision:number;updatedAt:number};
+export type RequestedMatch = {teams:DoublesTeams;gamesRemaining:number;createdAt:number};
+export type Session = {id:string;title:string;club:string;slogan?:string;globalArchives?:StandingsSnapshot[];globalStandingsRoot?:string;globalStandingsCutoffs?:StandingsCutoffs;queueMode?:QueueMode;clubs?:{A:string;B:string};showStandings?:boolean;selfCheckin?:boolean;hardCap?:boolean;capacityLimit?:boolean;nextOverrides?:Record<string,DoublesTeams>;sharedNext?:Plan[];requestedMatch?:RequestedMatch;gameStarts?:number;primary:string;accent:string;logo:string;createdAt:number;endedAt?:number;players:Player[];courts:Court[];partners:Record<string,number>;opponents:Record<string,number>;history:{id:string;court:string;courtId?:string;teams:string[][];names:string[][];endedAt:number;duration:number;score:string;reason:string;winner?:0|1}[];round:number;rotationProgress:number;rotationSelections:string[];seed:number;standardRules:boolean;revision:number;updatedAt:number};
 export const CAP_MINUTES = 13;
 export const CAP_PLAYER_THRESHOLD = 22;
 export const CAP = CAP_MINUTES * 60_000;
@@ -34,7 +35,8 @@ function queuePriorities(players: Player[], byQueue = false) {
 }
 
 export function waiting(session: Session) {
-  const queue = session.players.filter(player => player.status === 'waiting');
+  const requested = new Set(session.requestedMatch?.teams.flat() ?? []);
+  const queue = session.players.filter(player => player.status === 'waiting' && !requested.has(player.id));
   const byQueue = usesQueueOrder(session);
   const priority = queuePriorities(queue, byQueue);
   const held = (player: Player) => Number(!!player.partnerId && !priority.has(player.partnerId));
@@ -514,14 +516,26 @@ export function openCourtForNext(session: Session, plan: Plan, preview: Plan[]) 
 
 function fill(s:Session,courtIds:string[],now:number,override?:{index:unknown;lineup:unknown}){
   const courts = s.courts.filter(court => courtIds.includes(court.id) && !court.match);
-  let plans: Plan[];
+  if (!courts.length) throw Error('There is no available court.');
+  const requested = s.requestedMatch?.gamesRemaining === 0 ? s.requestedMatch : undefined;
+  if (requested && override) throw Error('The requested match is ready. Start it before sending another lineup.');
+  const requestedCourt = requested ? courts[0] : undefined;
+  if (requestedCourt && requested) {
+    delete s.requestedMatch;
+    if (s.nextOverrides) delete s.nextOverrides[requestedCourt.id];
+    requestedCourt.match = { id: 'requested-pending', teams: requested.teams, startedAt: now, pausedAt: null, pausedMs: 0 };
+    for (const id of requested.teams.flat()) {
+      const player = s.players.find(item => item.id === id);
+      if (player) { player.status = 'playing'; player.missed = 0; player.queueAhead = []; }
+    }
+  }
+  const availableCourts = requestedCourt ? courts.slice(1) : courts;
+  let plans: Plan[] = [];
   if (override) {
     const preview = upcomingPlans(s);
     const {index, lineup} = override;
     const selected = index === 0 || index === 1 ? preview[index] : undefined;
-    if (!selected || JSON.stringify(selected.teams) !== lineup) {
-      throw Error('Up Next has changed. Select the group again.');
-    }
+    if (!selected || JSON.stringify(selected.teams) !== lineup) throw Error('Up Next has changed. Select the group again.');
     const court = openCourtForNext(s, selected, preview);
     if (!court) throw Error('There is no available court for this group.');
     plans = [{ ...selected, courtId: court.id }];
@@ -529,15 +543,16 @@ function fill(s:Session,courtIds:string[],now:number,override?:{index:unknown;li
   } else if (usesSharedNext(s)) {
     const preview = upcomingPlans(s);
     const shared = preview.filter(plan => !plan.courtId);
-    plans = courts.flatMap(court => {
+    plans = availableCourts.flatMap(court => {
       const plan = preview.find(item => item.courtId === court.id) ?? shared.shift();
       return plan ? [{ ...plan, courtId: court.id }] : [];
     });
     if (usesAtrSitOut(s)) plans.sort((a, b) => Number(!!a.manual) - Number(!!b.manual));
     s.sharedNext = shared;
   } else {
-    plans = planMatches(s, courts.length, now, courts.map(court => court.id));
+    plans = planMatches(s, availableCourts.length, now, availableCourts.map(court => court.id));
   }
+  if (requested && requestedCourt) plans.unshift({ teams: requested.teams, penalty: 0, courtId: requestedCourt.id, manual: true });
   if (!plans.length) throw Error('No eligible lineup for the current matching mode and open courts.');
   s.gameStarts = (s.gameStarts ?? 0) + plans.length;
   releaseEntryQueue(s, plans.flatMap(plan => plan.teams.flat()));
@@ -548,7 +563,22 @@ function finish(s:Session,court:Court,now:number,score:string,reason:string,winn
   const m=court.match;if(!m)return;const ids=m.teams.flat();const duration=elapsed(m,now);
   s.history.unshift({id:m.id,court:court.name,courtId:court.id,teams:m.teams,names:m.teams.map(t=>t.map(id=>s.players.find(p=>p.id===id)?.name||'Player')),endedAt:now,duration,score,reason,...(winner!==undefined?{winner}:{})});
   for(const p of s.players)if(ids.includes(p.id)){p.status='waiting';p.games++;p.waitSince=now;p.missed=0;p.eligibleAfterStart=(s.gameStarts??0)+ATR_SIT_OUT_GAMES;}
+  if (s.requestedMatch) s.requestedMatch.gamesRemaining = Math.max(0, s.requestedMatch.gamesRemaining - 1);
   court.match=null;
+}
+function releaseRequestedMatch(s:Session,now:number,excluded:string[]=[]){
+  const requested=s.requestedMatch;
+  if(!requested)return;
+  const ahead=waiting(s).map(player=>player.id);
+  delete s.requestedMatch;
+  const skip=new Set(excluded);
+  for(const id of requested.teams.flat()){
+    const player=s.players.find(item=>item.id===id);
+    if(!player||skip.has(id)||player.status!=='waiting')continue;
+    player.waitSince=now;
+    player.missed=0;
+    player.queueAhead=[...ahead];
+  }
 }
 const previousDemoNames = ['Sean Edu','Pearl Santos','Miguel Reyes','Alyssa Cruz','Carlo Garcia','Bea Mendoza','James Tan','Nicole Lim','Marco Dela Cruz','Trisha Ramos','Paolo Rivera','Camille Sy','David Santos','Sofia Reyes','Anton Lim','Grace Navarro','Ryan Torres','Patricia Chua','Josh Aquino','Mia Flores','Ken Bautista','Ella Villanueva','Chris Go','Dani Castillo'];
 const hollywoodDemoNames = ["Tom Hanks", "Meryl Streep", "Leonardo DiCaprio", "Scarlett Johansson", "Denzel Washington", "Julia Roberts", "Brad Pitt", "Sandra Bullock", "Keanu Reeves", "Anne Hathaway", "Robert Downey Jr.", "Emma Stone", "Will Smith", "Jennifer Lawrence", "Morgan Freeman", "Nicole Kidman", "Matt Damon", "Charlize Theron", "Ryan Reynolds", "Natalie Portman", "George Clooney", "Viola Davis", "Hugh Jackman", "Kate Winslet"];
@@ -602,7 +632,26 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
  }
  switch(action.type){
  case 'addPlayers':{const side=s.queueMode==='clubs'&&(action.side==='A'||action.side==='B')?action.side:undefined;if(s.queueMode==='clubs'&&!side)throw Error('Choose the players’ club.');const raw=Array.isArray(action.names)?action.names:[];const names=raw.map(n=>String(n).trim()).filter(Boolean);if(!names.length)throw Error('Add at least one player name.');if(s.players.length+names.length>100)throw Error('The session can hold up to 100 checked-in players.');const active=activePlayers(s);if(s.capacityLimit!==false&&active.length+names.length>s.courts.length*12)throw Error('Active capacity is 12 players per court. Add a court or pause players before adding more.');const queueAhead=waiting(s).map(player=>player.id);const baseline=active.length?Math.floor(active.reduce((n,p)=>n+rotationGames(p),0)/active.length):0;for(const name of names){if(name.length>60)throw Error('Player names must be 60 characters or fewer.');s.players.push({id:crypto.randomUUID(),name,skill:str('skill').slice(0,12),side,games:0,queueAhead,credit:baseline,status:'waiting',waitSince:now,joinedAt:now,missed:0});}break;}
- case 'fillNextGroup':fill(s,[],now,{index:action.index,lineup:action.lineup});break;
+ case 'createRequestedMatch': {
+    if(s.requestedMatch)throw Error('A requested match is already waiting.');
+    const teams=readLineup(action.playerIds);
+    const queue=waiting(s);
+    const ids=teams.flat();
+    if(!ids.every(id=>queue.some(player=>player.id===id)))throw Error('Choose four players from the waiting queue.');
+    assertLinkedLineup(s,teams);
+    const selected=new Set(ids);
+    for(const [courtId,lineup] of Object.entries(s.nextOverrides??{}))if(lineup.flat().some(id=>selected.has(id)))delete s.nextOverrides![courtId];
+    const playersAhead=queue.length-4;
+    const activeGames=s.courts.filter(item=>item.match).length;
+    s.requestedMatch={teams,gamesRemaining:Math.ceil(playersAhead/4)+activeGames,createdAt:now};
+    break;
+  }
+  case 'cancelRequestedMatch': {
+    if(!s.requestedMatch)throw Error('There is no requested match to cancel.');
+    releaseRequestedMatch(s,now);
+    break;
+  }
+  case 'fillNextGroup':fill(s,[],now,{index:action.index,lineup:action.lineup});break;
  case 'fill':fill(s,str('courtId')?[str('courtId')]:s.courts.map(c=>c.id),now);break;
  case 'end':{
  if(!court?.match)throw Error('This court is already open.');
@@ -620,11 +669,12 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
    s.endedAt = now;
    s.selfCheckin = false;
    delete s.nextOverrides;
+   delete s.requestedMatch;
    break;
  }
  case 'endAll':for(const c of s.courts)if(c.match)finish(s,c,now,'Not recorded',capReached(s,c.match,now)?CAP_REASON:'Batch rotation');break;
  case 'timer':{if(!court?.match)throw Error('No active game on this court.');if(hardCapEnabled(s))throw Error(`Timers cannot pause while the ${CAP_MINUTES}-minute hard cap is on.`);const m=court.match;if(m.pausedAt){m.pausedMs+=now-m.pausedAt;m.pausedAt=null;}else m.pausedAt=now;break;}
- case 'pausePlayer':{const p=s.players.find(p=>p.id===str('playerId'));if(!p)throw Error('Player not found.');if(p.status==='playing')throw Error('Swap this player off court before placing them on break.');if(p.status==='paused'){if(s.capacityLimit!==false&&activePlayers(s).length>=s.courts.length*12)throw Error('Active-player capacity is full.');p.status='waiting';p.waitSince=now;p.missed=0;const baseline=Math.floor(activePlayers(s).reduce((n,q)=>n+rotationGames(q),0)/Math.max(1,activePlayers(s).length));p.credit=Math.max(p.credit||0,baseline-p.games);}else if(p.status==='waiting'){p.status='paused';removeReservations(s,[p.id]);releaseEntryQueue(s,[p.id]);}else throw Error('This player is checked out.');break;}
+ case 'pausePlayer':{const p=s.players.find(p=>p.id===str('playerId'));if(!p)throw Error('Player not found.');if(s.requestedMatch?.teams.flat().includes(p.id))releaseRequestedMatch(s,now);if(p.status==='playing')throw Error('Swap this player off court before placing them on break.');if(p.status==='paused'){if(s.capacityLimit!==false&&activePlayers(s).length>=s.courts.length*12)throw Error('Active-player capacity is full.');p.status='waiting';p.waitSince=now;p.missed=0;const baseline=Math.floor(activePlayers(s).reduce((n,q)=>n+rotationGames(q),0)/Math.max(1,activePlayers(s).length));p.credit=Math.max(p.credit||0,baseline-p.games);}else if(p.status==='waiting'){p.status='paused';removeReservations(s,[p.id]);releaseEntryQueue(s,[p.id]);}else throw Error('This player is checked out.');break;}
  case 'swap':{if(!court?.match)throw Error('No active game.');const incoming=s.players.find(p=>p.id===str('incomingId')),out=s.players.find(p=>p.id===str('outgoingId'));if(!incoming||incoming.status!=='waiting'||!out||!court.match.teams.flat().includes(out.id))throw Error('Select an on-court player and a waiting replacement.');const teams=court.match.teams.map(t=>t.map(id=>id===out.id?incoming.id:id)) as [string[],string[]];
  const mode=s.queueMode??'atr';
  const participants=teams.flat().map(id=>s.players.find(p=>p.id===id)!);
@@ -712,6 +762,7 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
    break;
  case 'checkoutPlayer': {
    const player = s.players.find(p => p.id === str('playerId'));
+   if(player&&s.requestedMatch?.teams.flat().includes(player.id))releaseRequestedMatch(s,now,[player.id]);
    if (!player || player.status === 'checkedOut') throw Error('This player is already checked out.');
    if (player.status === 'playing') {
      const current = s.courts.find(c => c.match?.teams.flat().includes(player.id));
@@ -728,6 +779,7 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
  }
  case 'deletePlayer': {
    const player = s.players.find(item => item.id === str('playerId'));
+   if(player&&s.requestedMatch?.teams.flat().includes(player.id))releaseRequestedMatch(s,now,[player.id]);
    if (!player) throw Error('This player has already been deleted.');
    if (player.status === 'playing') {
      const current = s.courts.find(item => item.match?.teams.flat().includes(player.id));
