@@ -33,7 +33,7 @@ export default function App(){
  const [s,setS]=useState<Session|null>(null),[tab,setTab]=useState<Tab>('overview'),[board,setBoard]=useState(false),[sid,setSid]=useState(''),[token,setToken]=useState(''),[demoAdmin,setDemoAdmin]=useState(false),[now,setNow]=useState(0),[offset,setOffset]=useState(0),[modal,setModal]=useState<Modal|null>(null),[busy,setBusy]=useState(false),[toast,setToast]=useState(''),[error,setError]=useState(''),[online,setOnline]=useState(true),[lastSync,setLastSync]=useState(0),[tv,setTv]=useState(false),[audio,setAudio]=useState(false),[search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[matrixType,setMatrixType]=useState('partners'),[full,setFull]=useState(false);
  const [photoWorking,setPhotoWorking]=useState(false);
  const [dark,setDark]=useState(false),[checkin,setCheckin]=useState(false),[photo,setPhoto]=useState(''),[checkedIn,setCheckedIn]=useState(false);
- const [pin,setPin]=useState(''),[names,setNames]=useState(''),[skill,setSkill]=useState(''),[scoreA,setScoreA]=useState(''),[scoreB,setScoreB]=useState(''),[early,setEarly]=useState(false),[historyWinner,setHistoryWinner]=useState<0|1>(0),[withDemo,setWithDemo]=useState(false),[liveTitle,setLiveTitle]=useState('Evening open play'),[draft,setDraft]=useState<Session|null>(null);
+ const [pin,setPin]=useState(''),[names,setNames]=useState(''),[skill,setSkill]=useState(''),[scoreA,setScoreA]=useState(''),[scoreB,setScoreB]=useState(''),[early,setEarly]=useState(false),[withDemo,setWithDemo]=useState(false),[liveTitle,setLiveTitle]=useState('Evening open play'),[draft,setDraft]=useState<Session|null>(null);
  const [continueRecords,setContinueRecords]=useState(false),[previousSession,setPreviousSession]=useState(''),[previousPin,setPreviousPin]=useState('');
  const promptOrganizerPin=useRef(false);
  const crestTaps=useRef(0);
@@ -75,7 +75,7 @@ export default function App(){
    setPreviousSession(previous);setContinueRecords(!!previous);setPreviousPin('');
   }
   setModal({...m,matchId:m.courtId?s?.courts.find(c=>c.id===m.courtId)?.match?.id:s?.courts.find(c=>c.match?.teams.flat().includes(m.playerId??''))?.match?.id});setError('');setPin('');setScoreA('');setScoreB('');setEarly(false);setPhoto(m.playerId?s?.players.find(p=>p.id===m.playerId)?.photo||'':'');if(m.type==='add')setNames('');}
- function editHistoryResult(game:Session['history'][number]){setHistoryWinner(game.winner??0);requireAdmin({type:'historyResult',historyId:game.id});}
+ function editHistoryResult(game:Session['history'][number]){requireAdmin({type:'historyResult',historyId:game.id});}
  function tapFooterCrest(){
   crestTaps.current++;
   if(crestTaps.current!==7)return;
@@ -235,7 +235,7 @@ export default function App(){
        onClear={upcoming&&s.nextOverrides?.[current.id]?()=>void act({type:'clearNextLineup',courtId:current.id},'Automatic pairing restored'):undefined}/>
    </>;
  })()}
- {modal.type==='historyResult'&&modal.historyId&&(()=>{const game=s.history.find(item=>item.id===modal.historyId);if(!game)return <><h2 id="modal-title">Match unavailable</h2><p>This history entry has changed or is no longer available.</p><Btn className="outline full-width" onClick={()=>setModal(null)}>Close</Btn></>;return <><h2 id="modal-title">Edit match result</h2><p>Choose the team that won. The match lineup and game history stay unchanged.</p><div className="atr-result-options">{game.names.map((team,index)=><button type="button" key={index} aria-pressed={historyWinner===index} className={`btn outline atr-result-team ${historyWinner===index?'selected':''}`} onClick={()=>setHistoryWinner(index as 0|1)}><strong>Team {index===0?'A':'B'} won</strong><span>{team.join(' & ')}</span></button>)}</div><div className="modal-actions"><Btn className="outline" disabled={busy} onClick={()=>setModal(null)}>Cancel</Btn><Btn className="primary" disabled={busy} onClick={()=>act({type:'editHistoryWinner',historyId:game.id,winner:historyWinner},'Match result updated')}>Save result</Btn></div></>;})()}
+ {modal.type==='historyResult'&&modal.historyId&&(()=>{const game=s.history.find(item=>item.id===modal.historyId);if(!game)return <><h2 id="modal-title">Match unavailable</h2><p>This history entry has changed or is no longer available.</p><Btn className="outline full-width" onClick={()=>setModal(null)}>Cancel</Btn></>;return <><h2 id="modal-title">Edit match result</h2><div className="atr-result-options">{(['A','B'] as const).map((winner,index)=><Btn key={winner} className="outline atr-result-team" disabled={busy} onClick={()=>act({type:'editHistoryWinner',historyId:game.id,winner:index},'Match result updated')}><strong>Team {winner}</strong></Btn>)}</div><Btn className="outline full-width" disabled={busy} onClick={()=>setModal(null)}>Cancel</Btn></>;})()}
   {modal.type==='checkout'&&modal.playerId&&(()=>{
    const player=p(modal.playerId);
    if(!player)return null;
