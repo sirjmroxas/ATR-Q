@@ -666,6 +666,14 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
    break;
  }
  const a=str('scoreA'),b=str('scoreB');const timed=capReached(s,court.match,now);if((a&&!b)||(!a&&b))throw Error('Enter both scores, or leave both blank.');if(a&&b){const x=Number(a),y=Number(b);if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>99||y>99)throw Error('Scores must be whole numbers from 0 to 99.');if(!timed&&str('reason')!=='early'){if(x===y||Math.max(x,y)<11)throw Error('A completed game needs a winner with at least 11 points. Use early rotation for an unfinished game.');if(effectiveFast(s)&&(Math.max(x,y)!==11))throw Error('Fast rotation ends at 11. Use early rotation for other scores.');if(!effectiveFast(s)&&Math.abs(x-y)<2)throw Error('Standard rules require a two-point lead.');}}finish(s,court,now,a&&b?a+' – '+b:'Not recorded',timed?CAP_REASON:str('reason')==='early'?'Early rotation':'Game completed');break;}
+ case 'editHistoryWinner': {
+   const game=s.history.find(item=>item.id===str('historyId'));
+   if(!game)throw Error('Match history entry not found.');
+   if(action.winner!==0&&action.winner!==1)throw Error('Choose the winning team.');
+   game.winner=action.winner;
+   if(game.score==='Not recorded'||game.score==='Team A won'||game.score==='Team B won')game.score=action.winner===0?'Team A won':'Team B won';
+   break;
+ }
  case 'endSession': {
    for (const court of s.courts) finish(s, court, now, 'Not recorded', 'Session ended');
    s.endedAt = now;
