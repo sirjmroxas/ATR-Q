@@ -264,4 +264,4 @@
 .dark-mode .requested-match-countdown span,.dark-mode .requested-countdown-preview small{color:#c5d6ec}
 @media(max-width:370px){.requested-match-panel{padding:12px}.requested-match-teams{gap:5px}.requested-match-teams .next-player{gap:5px}.requested-match-teams .next-player>span{font-size:11px}}
 
-.history-edit{margin-top:9px;min-height:34px;padding:7px 10px;font-size:11px}.atr-result-team.selected{border-color:var(--primary);background:#edf3fa;box-shadow:inset 0 0 0 1px var(--primary)}
+.history-score{display:flex;flex-direction:column;align-items:flex-end;gap:8px}.history-edit{margin-top:0;min-height:34px;padding:7px 10px;font-size:11px}.atr-result-team.selected{border-color:var(--primary);background:#edf3fa;box-shadow:inset 0 0 0 1px var(--primary)}
