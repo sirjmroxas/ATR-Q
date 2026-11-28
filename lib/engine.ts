@@ -631,9 +631,6 @@ export function applyAction(input:Session,action:Action,now=Date.now()):Session{
  let s=clone(migrateDemoNames(input));const str=(k:string)=>String(action[k]??'');const court=s.courts.find(c=>c.id===str('courtId'));
  // Preserve announced groups across court openings. Recalculate after queue or lineup edits.
  if (!['end', 'endAll', 'fill', 'fillNextGroup', 'timer'].includes(action.type)) delete s.sharedNext;
- if ((action.type === 'end' || action.type === 'endAll') && usesSharedNext(s)) {
-   s.sharedNext = upcomingPlans(s).filter(plan => !plan.courtId);
- }
  switch(action.type){
  case 'addPlayers':{const side=s.queueMode==='clubs'&&(action.side==='A'||action.side==='B')?action.side:undefined;if(s.queueMode==='clubs'&&!side)throw Error('Choose the players’ club.');const raw=Array.isArray(action.names)?action.names:[];const names=raw.map(n=>String(n).trim()).filter(Boolean);if(!names.length)throw Error('Add at least one player name.');if(s.players.length+names.length>100)throw Error('The session can hold up to 100 checked-in players.');const active=activePlayers(s);if(s.capacityLimit!==false&&active.length+names.length>s.courts.length*12)throw Error('Active capacity is 12 players per court. Add a court or pause players before adding more.');const queueAhead=waiting(s).map(player=>player.id);const baseline=active.length?Math.floor(active.reduce((n,p)=>n+rotationGames(p),0)/active.length):0;for(const name of names){if(name.length>60)throw Error('Player names must be 60 characters or fewer.');s.players.push({id:crypto.randomUUID(),name,skill:str('skill').slice(0,12),side,games:0,queueAhead,credit:baseline,status:'waiting',waitSince:now,joinedAt:now,missed:0});}break;}
  case 'createRequestedMatch': {
